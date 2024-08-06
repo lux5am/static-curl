@@ -42,7 +42,7 @@ jobs:
         run: |
           ARCHES="${ARCHES}"
           CURL_VERSION=${CURL_VERSION}
-          TLS_LIB=${TLS_LIB}
+          TLS_LIB=openssl
           QUICTLS_VERSION=${QUICTLS_VERSION}
           OPENSSL_VERSION=${OPENSSL_VERSION}
           NGTCP2_VERSION=${NGTCP2_VERSION}
