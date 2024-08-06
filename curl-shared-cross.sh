@@ -740,11 +740,12 @@ curl_config() {
             --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt \
             --with-ca-path=/etc/ssl/certs \
             --with-ca-fallback \
+            --with-brotli \
+            --with-zstd \
             --with-nghttp2 \
             --without-libidn \
             --without-libidn2 \
             --without-librtmp \
-            --without-brotli \
             --without-libpsl \
             --with-libssh2 \
             --with-ssl \
@@ -905,7 +906,7 @@ compile() {
 
     compile_tls;
     compile_zlib;
-    # compile_zstd;
+    compile_zstd;
     compile_libunistring;
     # compile_libidn2;
     # compile_libpsl;
@@ -914,7 +915,7 @@ compile() {
     compile_nghttp3;
     # compile_ngtcp2;
     compile_nghttp2;
-    # compile_brotli;
+    compile_brotli;
     compile_curl;
     # compile_trurl;
 
