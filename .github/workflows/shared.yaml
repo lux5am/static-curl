@@ -17,7 +17,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Cross Build Static cURL
+      - name: Cross Build Shared cURL
         env:
           CURL_VERSION: ${{ vars.CURL_VERSION }}
           TLS_LIB: ${{ vars.TLS_LIB }}

@@ -737,6 +737,9 @@ curl_config() {
             --host="${TARGET}" \
             --prefix="${PREFIX}" \
             --enable-shared --enable-static \
+            --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt \
+            --with-ca-path=/etc/ssl/certs \
+            --with-ca-fallback \
             --with-nghttp2 \
             --without-libidn \
             --without-libidn2 \
