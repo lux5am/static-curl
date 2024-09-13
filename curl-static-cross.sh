@@ -234,7 +234,7 @@ arch_variants() {
                         OPENSSL_ARCH="linux-aarch64" ;;
         armv5)          qemu_arch="arm"
                         OPENSSL_ARCH="linux-armv4" ;;
-        armv7l|armv6)   qemu_arch="arm"
+        armv7*|armv6)   qemu_arch="arm"
                         OPENSSL_ARCH="linux-armv4" ;;
         i686)           qemu_arch="i386"
                         OPENSSL_ARCH="linux-x86" ;;
@@ -552,12 +552,19 @@ compile_tls() {
     url="${URL}"
     download_and_extract "${url}"
 
+    # issues/83 VIA padlock
+    no_hw_padlock=""
+    if [ "${ARCH}" = "x86_64" ] || [ "${ARCH}" = "i686" ]; then
+        no_hw_padlock="no-hw-padlock"
+    fi
+
     ./Configure \
         ${OPENSSL_ARCH} \
         -fPIC \
         --prefix="${PREFIX}" \
         threads no-shared \
         enable-ktls \
+        ${no_hw_padlock} \
         ${EC_NISTP_64_GCC_128} \
         enable-tls1_3 \
         enable-ssl3 enable-ssl3-method \
@@ -713,7 +720,11 @@ compile_trurl() {
     LDFLAGS="-static -Wl,-s ${LDFLAGS}" make PREFIX="${PREFIX}";
     make install;
 
-    _copy_license LICENSES/curl.txt trurl;
+    if [ -f LICENSES/COPYING ]; then
+        _copy_license LICENSES/COPYING trurl;
+    elif [ -f LICENSES/curl.txt ]; then
+        _copy_license LICENSES/curl.txt trurl;
+    fi
 }
 
 curl_config() {
