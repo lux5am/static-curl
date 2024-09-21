@@ -260,7 +260,7 @@ arch_variants() {
     unset LD STRIP LDFLAGS
     TARGET="${ARCH}-pc-linux-gnu"
     export LDFLAGS="-L${PREFIX}/lib -L${PREFIX}/lib64";
-    libc_flag="";
+    libc_flag="-glibc";
 
     if [ "${ARCH}" != "${ARCH_HOST}" ] || [ "${LIBC}" = "musl" ]; then
         # If the architecture is not the same as the host, or it is Alpine, then cross compile
