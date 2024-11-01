@@ -919,7 +919,7 @@ compile() {
     compile_tls;
     compile_zlib;
     compile_zstd;
-    compile_libunistring;
+    # compile_libunistring;
     # compile_libidn2;
     # compile_libpsl;
     # compile_ares;
