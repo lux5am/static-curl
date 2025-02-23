@@ -341,10 +341,10 @@ compile_tls() {
     local url
     change_dir;
 
-    if [ "${TLS_LIB}" = "openssl" ]; then
-        url_from_github openssl/openssl "${OPENSSL_VERSION}"
-    else
+    if [ "${TLS_LIB}" = "quictls" ]; then
         url_from_github quictls/openssl "${QUICTLS_VERSION}"
+    else
+        url_from_github openssl/openssl "${OPENSSL_VERSION}"
     fi
 
     url="${URL}"
@@ -535,7 +535,7 @@ curl_config() {
             --enable-get-easy-options --enable-progress-meter \
             --with-ca-bundle=/etc/ssl/cert.pem \
             --with-ca-path=/etc/ssl/certs \
-            --with-ca-fallback --enable-ares \
+            --with-ca-fallback --enable-ares --enable-ipfs \
             --disable-ldap --disable-ldaps --disable-rtsp \
             --disable-rtmp --disable-rtmps --enable-ssls-export \
             "${ENABLE_DEBUG}" \
