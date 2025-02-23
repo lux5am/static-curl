@@ -19,8 +19,9 @@ jobs:
 
       - name: Cross Build Shared cURL
         env:
+          ARCHES: "aarch64"
           CURL_VERSION: ${{ vars.CURL_VERSION }}
-          TLS_LIB: ${{ vars.TLS_LIB }}
+          TLS_LIB: "openssl"
           QUICTLS_VERSION: ${{ vars.QUICTLS_VERSION_MUSL }}
           OPENSSL_VERSION: ${{ vars.OPENSSL_VERSION_MUSL }}
           NGTCP2_VERSION: ${{ vars.NGTCP2_VERSION_MUSL }}
@@ -36,13 +37,13 @@ jobs:
           ENABLE_TRURL: ${{ vars.ENABLE_TRURL_MUSL }}
           TRURL_VERSION: ${{ vars.TRURL_VERSION_MUSL }}
           LIBC: musl
+          STATIC_LIBRARY: 1
           CONTAINER_IMAGE: debian:latest
           TOKEN_READ: ${{ secrets.GITHUB_TOKEN }}
-          ARCHES: "aarch64"
         run: |
           ARCHES="${ARCHES}"
           CURL_VERSION=${CURL_VERSION}
-          TLS_LIB=openssl
+          TLS_LIB=${TLS_LIB}
           QUICTLS_VERSION=${QUICTLS_VERSION}
           OPENSSL_VERSION=${OPENSSL_VERSION}
           NGTCP2_VERSION=${NGTCP2_VERSION}
@@ -58,6 +59,7 @@ jobs:
           ENABLE_TRURL=${ENABLE_TRURL}
           TRURL_VERSION=${TRURL_VERSION}
           LIBC=${LIBC}
+          STATIC_LIBRARY=${STATIC_LIBRARY}
           CONTAINER_IMAGE=${CONTAINER_IMAGE}
           TOKEN_READ=${TOKEN_READ}
           sh curl-shared-cross.sh
