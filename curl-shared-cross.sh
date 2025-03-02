@@ -198,8 +198,10 @@ install_cross_compile_debian() {
 
     export LD="/usr/bin/${arch_compiler}-linux-${c_lib}-ld" \
            STRIP="/usr/bin/${arch_compiler}-linux-${c_lib}-strip" \
+           AS="/usr/bin/${arch_compiler}-linux-${c_lib}-as" \
            CFLAGS="-O3" \
            LDFLAGS="--ld-path=/usr/bin/${arch_compiler}-linux-${c_lib}-ld ${LDFLAGS}";
+    ls -l "/usr/bin/${arch_compiler}-linux-${c_lib}-*"
 }
 
 install_qemu() {

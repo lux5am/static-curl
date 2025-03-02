@@ -19,9 +19,9 @@ jobs:
 
       - name: Cross Build Shared cURL
         env:
-          ARCHES: "aarch64"
+          ARCHES: ${{ vars.ARCHES_LINUX_MUSL }}
           CURL_VERSION: ${{ vars.CURL_VERSION }}
-          TLS_LIB: "openssl"
+          TLS_LIB: ${{ vars.TLS_LIB }}
           QUICTLS_VERSION: ${{ vars.QUICTLS_VERSION_MUSL }}
           OPENSSL_VERSION: ${{ vars.OPENSSL_VERSION_MUSL }}
           NGTCP2_VERSION: ${{ vars.NGTCP2_VERSION_MUSL }}
