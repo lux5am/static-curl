@@ -155,7 +155,11 @@ install_cross_compile() {
            CXX="${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-c++" \
            CFLAGS="-O3 -Wno-error=unknown-pragmas -Wno-error=sign-compare -Wno-error=cast-align -Wno-maybe-uninitialized -Wno-error=null-dereference" \
            STRIP="${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-strip" \
+           AS="${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as" \
+           AS="/usr/bin/${arch_compiler}-linux-${c_lib}-as" \
            PATH="${DIR}/${SOURCE_DIR}/bin":"${DIR}/${SOURCE_DIR}/${SOURCE_DIR}/bin":"$PATH"
+    ls -l "${DIR}/${SOURCE_DIR}/bin"
+    ls -l "${DIR}/${SOURCE_DIR}/${SOURCE_DIR}/bin"
 }
 
 install_cross_compile_debian() {
@@ -198,10 +202,8 @@ install_cross_compile_debian() {
 
     export LD="/usr/bin/${arch_compiler}-linux-${c_lib}-ld" \
            STRIP="/usr/bin/${arch_compiler}-linux-${c_lib}-strip" \
-           AS="/usr/bin/${arch_compiler}-linux-${c_lib}-as" \
            CFLAGS="-O3" \
            LDFLAGS="--ld-path=/usr/bin/${arch_compiler}-linux-${c_lib}-ld ${LDFLAGS}";
-    ls -l "/usr/bin/${arch_compiler}-linux-${c_lib}-*"
 }
 
 install_qemu() {
