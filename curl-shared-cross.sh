@@ -121,13 +121,6 @@ install_packages() {
 
 install_cross_compile() {
     echo "Installing cross compile toolchain, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-
-    change_dir;
-    download_and_extract "https://musl.libc.org/releases/musl-1.2.5.tar.gz"
-    ./configure
-    make -j "$(nproc)";
-    make install
-
     change_dir;
     local url arch_alt
 
@@ -162,14 +155,7 @@ install_cross_compile() {
            CXX="${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-c++" \
            CFLAGS="-O3 -Wno-error=unknown-pragmas -Wno-error=sign-compare -Wno-error=cast-align -Wno-maybe-uninitialized -Wno-error=null-dereference" \
            STRIP="${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-strip" \
-           AS="${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as" \
            PATH="${DIR}/${SOURCE_DIR}/bin":"${DIR}/${SOURCE_DIR}/${SOURCE_DIR}/bin":"$PATH"
-
-    ls -l "${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as"
-    file "${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as"
-    ldd "${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as"
-
-    find / -name 'libc.musl-x86_64.so.1' 2>/dev/null
 }
 
 install_cross_compile_debian() {
@@ -214,6 +200,16 @@ install_cross_compile_debian() {
            STRIP="/usr/bin/${arch_compiler}-linux-${c_lib}-strip" \
            CFLAGS="-O3" \
            LDFLAGS="--ld-path=/usr/bin/${arch_compiler}-linux-${c_lib}-ld ${LDFLAGS}";
+}
+
+install_musl_libc() {
+    change_dir;
+    local base_url="https://musl.libc.org/"
+    local url=$(curl --retry 5 --retry-max-time 120 -s "${base_url}" | grep "Latest release:" | grep -oP '(?<=href=")[^"]*' | head -n 1)
+    download_and_extract "${base_url}${url}"
+    ./configure
+    make -j "$(nproc)";
+    make install
 }
 
 install_qemu() {
@@ -285,6 +281,7 @@ arch_variants() {
         if [ "${LIBC}" = "musl" ] || [ "${ID}" = "alpine" ]; then
             # Alpine does not have a GCC cross-compile toolchain.
             # Therefore, musl-cross-make is used for compilation.
+            install_musl_libc;
             install_cross_compile;
             libc_flag="-musl";
         else
