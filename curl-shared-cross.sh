@@ -121,6 +121,13 @@ install_packages() {
 
 install_cross_compile() {
     echo "Installing cross compile toolchain, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
+
+    change_dir;
+    download_and_extract "https://musl.libc.org/releases/musl-1.2.5.tar.gz"
+    ./configure
+    make -j "$(nproc)";
+    make install
+
     change_dir;
     local url arch_alt
 
@@ -158,7 +165,6 @@ install_cross_compile() {
            AS="${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as" \
            PATH="${DIR}/${SOURCE_DIR}/bin":"${DIR}/${SOURCE_DIR}/${SOURCE_DIR}/bin":"$PATH"
 
-    apt-get install -y "${LIBC}"
     ls -l "${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as"
     file "${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as"
     ldd "${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as"
