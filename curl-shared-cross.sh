@@ -162,6 +162,8 @@ install_cross_compile() {
     ls -l "${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as"
     file "${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as"
     ldd "${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as"
+
+    find / -name 'libc.musl-x86_64.so.1' 2>/dev/null
 }
 
 install_cross_compile_debian() {
