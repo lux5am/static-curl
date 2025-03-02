@@ -157,6 +157,8 @@ install_cross_compile() {
            STRIP="${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-strip" \
            AS="${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as" \
            PATH="${DIR}/${SOURCE_DIR}/bin":"${DIR}/${SOURCE_DIR}/${SOURCE_DIR}/bin":"$PATH"
+
+    apt-get install -y "${LIBC}"
     ls -l "${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as"
     file "${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as"
     ldd "${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-as"
