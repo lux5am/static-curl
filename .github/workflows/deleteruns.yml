@@ -1,0 +1,15 @@
+name: delete old workflow runs
+
+on:
+  # run it manually
+  workflow_dispatch:
+
+jobs:
+  del_runs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean workflow runs
+        uses: dmvict/clean-workflow-runs@v1
+        with:
+          save_period: 7
+          save_min_runs_number: 5
