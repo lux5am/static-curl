@@ -560,7 +560,7 @@ compile_ares() {
 
 compile_tls() {
     echo "Compiling ${TLS_LIB}, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-    local url
+    local url no_hw_padlock no_pie_tests_asm cflags
     change_dir;
 
     if [ "${OPENSSL_VERSION}" = "dev" ] && [ -n "${OPENSSL_BRANCH}" ]; then
@@ -581,20 +581,34 @@ compile_tls() {
     fi
 
     # issues/83 VIA padlock
-    no_hw_padlock=""
     if [ "${ARCH}" = "x86_64" ] || [ "${ARCH}" = "i686" ]; then
         no_hw_padlock="no-hw-padlock"
     fi
 
+    # no-asm no-pie no-tests for i686 with musl libc
+    # gcc 15 and musl have more strict security checks, so need to disable the i686 asm, uses pure C code,
+    # It affects approximately 5% of performance.
+    if [ "${ARCH}" = "i686" ] && [ "${LIBC}" = "musl" ]; then
+        no_pie_tests_asm="no-pie no-tests no-asm"
+    fi
+
+    # Workaround: Force-disable C11 atomics to fix clang MIPS cross-compile bug
+    cflags="${CFLAGS}"
+    if [ "${ARCH}" = "mips" ] && [ "${LIBC}" != "musl" ]; then
+        cflags="${CFLAGS} -D__STDC_NO_ATOMICS__"
+    fi
+
+    CFLAGS="${cflags}" \
     ./Configure \
         ${OPENSSL_ARCH} \
         -fPIC \
         --prefix="${PREFIX}" \
         --openssldir=/etc/ssl \
         threads no-shared \
-        enable-ktls \
+        ${no_pie_tests_asm} \
         ${no_hw_padlock} \
         ${EC_NISTP_64_GCC_128} \
+        enable-ktls \
         enable-tls1_3 \
         enable-ssl3 enable-ssl3-method \
         enable-des enable-rc4 \
@@ -759,13 +773,17 @@ compile_trurl() {
 
 curl_config() {
     echo "Configuring curl, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-    local with_openssl_quic with_ech
+    local with_openssl_quic with_ech ac_cv_header_stdatomic_h
 
     # --with-openssl-quic and --with-ngtcp2 are mutually exclusive
     if [ "${TLS_LIB}" = "openssl" ]; then
         with_openssl_quic="--with-openssl-quic"
     else
         with_openssl_quic="--with-ngtcp2"
+    fi
+
+    if [ "${ARCH}" = "mips" ] && [ "${LIBC}" != "musl" ]; then
+        ac_cv_header_stdatomic_h="ac_cv_header_stdatomic_h=no"
     fi
 
     case "${ENABLE_ECH}" in
@@ -785,6 +803,7 @@ curl_config() {
         --with-nghttp2 --with-nghttp3 \
         --with-libidn2 --with-libssh2 \
         "${with_ech}" \
+        "${ac_cv_header_stdatomic_h}" \
         --enable-hsts --enable-mime --enable-cookies \
         --enable-http-auth --enable-manual \
         --enable-proxy --enable-file --enable-http \
@@ -878,7 +897,7 @@ _arch_valid() {
     # Mapping of supported target architectures for different host platforms:
     # - When host is x86_64: supports building for x86_64, aarch64, i686, etc.
     # - When host is aarch64: supports building for x86_64, aarch64, etc.
-    local arch_x86_64="x86_64 aarch64 armv5 armv7 armv7l riscv64 s390x mips64 mips64el powerpc64le mipsel i686 mips powerpc loongarch64"
+    local  arch_x86_64="x86_64 aarch64 armv5 armv7 armv7l riscv64 s390x mips64 mips64el powerpc64le mipsel i686 mips powerpc loongarch64"
     local arch_aarch64="x86_64 aarch64 armv5 armv7 armv7l riscv64 s390x mips64 mips64el powerpc64le mipsel i686 mips powerpc loongarch64"
 
     if [ "${ARCH_HOST}" = "x86_64" ]; then
