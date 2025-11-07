@@ -15,11 +15,8 @@ on:
       ENABLE_ECH:
         description: 'Enable ECH Support'
         required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
+        default: false
+        type: boolean
       TLS_LIB:
         description: 'TLS Library (only openssl is supported for now)'
         required: false
@@ -66,11 +63,11 @@ jobs:
           echo "ZSTD_VERSION=${{ vars.ZSTD_VERSION }}" >> $GITHUB_ENV
           echo "LIBSSH2_VERSION=${{ vars.LIBSSH2_VERSION }}" >> $GITHUB_ENV
           echo "ARES_VERSION=${{ vars.ARES_VERSION }}" >> $GITHUB_ENV
-          echo "ENABLE_TRURL=${{ vars.ENABLE_TRURL_MUSL }}" >> $GITHUB_ENV
+          echo "ENABLE_TRURL=${{ vars.ENABLE_TRURL }}" >> $GITHUB_ENV
           echo "TRURL_VERSION=${{ vars.TRURL_VERSION }}" >> $GITHUB_ENV
           echo "LIBC=musl" >> $GITHUB_ENV
-          echo "QBT_MUSL_CROSS_MAKE_VERSION=${{ vars.QBT_MUSL_CROSS_MAKE_VERSION }}" >> $GITHUB_ENV
           echo "STATIC_LIBRARY=1" >> $GITHUB_ENV
+          echo "QBT_MUSL_CROSS_MAKE_VERSION=${{ vars.QBT_MUSL_CROSS_MAKE_VERSION }}" >> $GITHUB_ENV
           echo "CONTAINER_IMAGE=debian:latest" >> $GITHUB_ENV
           echo "TOKEN_READ=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
 
