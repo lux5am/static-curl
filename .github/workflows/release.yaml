@@ -30,22 +30,22 @@ on:
         default: 'feature/ech'
         type: string
       ARCHES_LINUX_GLIBC:
-        description: 'Linux glibc Architecture List'
+        description: "Linux glibc Architecture List (set 'none' to skip)"
         required: false
         default: 'x86_64 aarch64 armv7 armv5 riscv64 s390x mips64 mips64el mips mipsel powerpc64le powerpc i686 loongarch64'
         type: string
       ARCHES_LINUX_MUSL:
-        description: 'Linux musl Architecture List'
+        description: "Linux musl Architecture List (set 'none' to skip)"
         required: false
         default: 'x86_64 aarch64 armv7 armv5 riscv64 s390x mips64 mips64el mips mipsel powerpc64le powerpc i686 loongarch64'
         type: string
       ARCHES_WINDOWS:
-        description: 'Windows Architecture List'
+        description: "Windows Architecture List (set 'none' to skip)"
         required: false
         default: 'x86_64 aarch64 armv7 i686'
         type: string
       ARCHES_MACOS:
-        description: 'macOS Architecture List'
+        description: "macOS Architecture List (set 'none' to skip)"
         required: false
         default: 'x86_64 arm64'
         type: string
@@ -53,11 +53,12 @@ on:
 jobs:
   build-Linux:
     name: build-Linux (${{ github.ref_name }})
+    if: inputs.ARCHES_LINUX_GLIBC != 'none'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -80,7 +81,7 @@ jobs:
           echo "ZSTD_VERSION=${{ vars.ZSTD_VERSION }}" >> $GITHUB_ENV
           echo "LIBSSH2_VERSION=${{ vars.LIBSSH2_VERSION }}" >> $GITHUB_ENV
           echo "ARES_VERSION=${{ vars.ARES_VERSION }}" >> $GITHUB_ENV
-          echo "ENABLE_TRURL=${{ vars.ENABLE_TRURL }}" >> $GITHUB_ENV
+          echo "ENABLE_TRURL=${{ vars.ENABLE_TRURL_GLIBC }}" >> $GITHUB_ENV
           echo "TRURL_VERSION=${{ vars.TRURL_VERSION }}" >> $GITHUB_ENV
           echo "LIBC=glibc" >> $GITHUB_ENV
           echo "QBT_MUSL_CROSS_MAKE_VERSION=${{ vars.QBT_MUSL_CROSS_MAKE_VERSION }}" >> $GITHUB_ENV
@@ -96,7 +97,7 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Upload artifact (version)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: curl-version
           path: release/version.txt
@@ -105,7 +106,7 @@ jobs:
           overwrite: true
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: curl-binary-linux-${{ env.VERSION }}
           path: release
@@ -115,11 +116,12 @@ jobs:
 
   build-Linux-musl:
     name: build-Linux-musl (${{ github.ref_name }})
+    if: inputs.ARCHES_LINUX_MUSL != 'none'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -159,7 +161,7 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Upload artifact (version)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: curl-version
           path: release/version.txt
@@ -168,7 +170,7 @@ jobs:
           overwrite: true
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: curl-binary-linux-musl-${{ env.VERSION }}
           path: release
@@ -178,11 +180,12 @@ jobs:
 
   build-Windows:
     name: build-Windows (${{ github.ref_name }})
+    if: inputs.ARCHES_WINDOWS != 'none'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -205,7 +208,7 @@ jobs:
           echo "ZSTD_VERSION=${{ vars.ZSTD_VERSION }}" >> $GITHUB_ENV
           echo "LIBSSH2_VERSION=${{ vars.LIBSSH2_VERSION }}" >> $GITHUB_ENV
           echo "ARES_VERSION=${{ vars.ARES_VERSION }}" >> $GITHUB_ENV
-          echo "ENABLE_TRURL=${{ vars.ENABLE_TRURL }}" >> $GITHUB_ENV
+          echo "ENABLE_TRURL=${{ vars.ENABLE_TRURL_WINDOWS }}" >> $GITHUB_ENV
           echo "TRURL_VERSION=${{ vars.TRURL_VERSION }}" >> $GITHUB_ENV
           echo "CONTAINER_IMAGE=mstorsjo/llvm-mingw:latest" >> $GITHUB_ENV
           echo "TOKEN_READ=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
@@ -219,7 +222,7 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Upload artifact (version)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: curl-version
           path: release/version.txt
@@ -228,7 +231,7 @@ jobs:
           overwrite: true
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: curl-binary-windows-${{ env.VERSION }}
           path: release
@@ -238,6 +241,7 @@ jobs:
 
   build-macOS:
     name: build-macOS (${{ github.ref_name }})
+    if: inputs.ARCHES_MACOS != 'none'
     runs-on: macos-latest
 
     steps:
@@ -246,7 +250,7 @@ jobs:
           echo "MACOS_RELEASE_DIR=${HOME}" >> $GITHUB_ENV
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -269,6 +273,8 @@ jobs:
           echo "ZSTD_VERSION=${{ vars.ZSTD_VERSION }}" >> $GITHUB_ENV
           echo "LIBSSH2_VERSION=${{ vars.LIBSSH2_VERSION }}" >> $GITHUB_ENV
           echo "ARES_VERSION=${{ vars.ARES_VERSION }}" >> $GITHUB_ENV
+          echo "ENABLE_TRURL=${{ vars.ENABLE_TRURL_MACOS }}" >> $GITHUB_ENV
+          echo "TRURL_VERSION=${{ vars.TRURL_VERSION }}" >> $GITHUB_ENV
           echo "TOKEN_READ=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
 
       - name: Build Static cURL on macOS
@@ -280,7 +286,7 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Upload artifact (version)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: curl-version
           path: ${{ env.MACOS_RELEASE_DIR }}/version.txt
@@ -289,7 +295,7 @@ jobs:
           overwrite: true
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: curl-binary-macos-${{ env.VERSION }}
           path: ${{ env.MACOS_RELEASE_DIR }}/release
@@ -300,16 +306,22 @@ jobs:
   release:
     name: release curl (${{ github.ref_name }})
     needs: [build-Linux, build-Linux-musl, build-Windows, build-macOS]
+    if: >-
+      !cancelled() && !failure() &&
+      (needs.build-Linux.result == 'success' ||
+       needs.build-Linux-musl.result == 'success' ||
+       needs.build-Windows.result == 'success' ||
+       needs.build-macOS.result == 'success')
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: curl-version
           path: curl-version
@@ -330,25 +342,29 @@ jobs:
           echo "Will release as: $RELEASE_TAG"
 
       - name: Download artifact (linux)
-        uses: actions/download-artifact@v4
+        if: needs.build-Linux.result == 'success'
+        uses: actions/download-artifact@v7
         with:
           name: curl-binary-linux-${{ env.VERSION }}
           path: release
 
       - name: Download artifact (linux-musl)
-        uses: actions/download-artifact@v4
+        if: needs.build-Linux-musl.result == 'success'
+        uses: actions/download-artifact@v7
         with:
           name: curl-binary-linux-musl-${{ env.VERSION }}
           path: release
 
       - name: Download artifact (macos)
-        uses: actions/download-artifact@v4
+        if: needs.build-macOS.result == 'success'
+        uses: actions/download-artifact@v7
         with:
           name: curl-binary-macos-${{ env.VERSION }}
           path: release
 
       - name: Download artifact (windows)
-        uses: actions/download-artifact@v4
+        if: needs.build-Windows.result == 'success'
+        uses: actions/download-artifact@v7
         with:
           name: curl-binary-windows-${{ env.VERSION }}
           path: release
@@ -359,7 +375,7 @@ jobs:
           echo
           file release/bin/curl-*
           echo
-          cat release/version-info.txt
+          cat release/version-info.txt 2>/dev/null || true
           echo
           sha256sum release/bin/curl-*
 
@@ -388,7 +404,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: curl-release-${{ env.RELEASE_TAG }}
           path: release
