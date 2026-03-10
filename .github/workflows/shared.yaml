@@ -25,7 +25,7 @@ on:
       OPENSSL_VERSION:
         description: 'OpenSSL Version'
         required: false
-        default: 'dev'
+        default: ''
         type: string
       OPENSSL_BRANCH:
         description: 'OpenSSL Branch'
@@ -40,7 +40,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -63,7 +63,7 @@ jobs:
           echo "ZSTD_VERSION=${{ vars.ZSTD_VERSION }}" >> $GITHUB_ENV
           echo "LIBSSH2_VERSION=${{ vars.LIBSSH2_VERSION }}" >> $GITHUB_ENV
           echo "ARES_VERSION=${{ vars.ARES_VERSION }}" >> $GITHUB_ENV
-          echo "ENABLE_TRURL=${{ vars.ENABLE_TRURL }}" >> $GITHUB_ENV
+          echo "ENABLE_TRURL=${{ vars.ENABLE_TRURL_MUSL }}" >> $GITHUB_ENV
           echo "TRURL_VERSION=${{ vars.TRURL_VERSION }}" >> $GITHUB_ENV
           echo "LIBC=musl" >> $GITHUB_ENV
           echo "STATIC_LIBRARY=1" >> $GITHUB_ENV
@@ -89,7 +89,7 @@ jobs:
           overwrite: true
 
       - name: Upload artifact install
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: curl-install-linux-musl-${{ env.VERSION }}
           path: release/curl-install*
@@ -98,7 +98,7 @@ jobs:
           overwrite: true
 
       - name: Upload artifact src
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: curl-src-linux-musl-${{ env.VERSION }}
           path: release/curl-src*
