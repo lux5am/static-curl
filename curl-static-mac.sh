@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # To compile locally, clone the Git repository, navigate to the repository directory,
 # and then execute the following command:
@@ -342,7 +342,7 @@ compile_ares() {
 
 compile_tls() {
     echo "Compiling ${TLS_LIB}, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-    local url
+    local url ssl3
     change_dir;
 
     if [ "${OPENSSL_VERSION}" = "dev" ] && [ -n "${OPENSSL_BRANCH}" ]; then
@@ -362,6 +362,14 @@ compile_tls() {
         download_and_extract "${url}"
     fi
 
+    # ssl3 is deprecated in 4.x
+    major_ver="${OPENSSL_VERSION%%.*}"
+    if [ "${OPENSSL_VERSION}" = "dev" ] || { [ "${major_ver}" -ge 4 ] 2>/dev/null; }; then
+        ssl3=""
+    else
+        ssl3="enable-ssl3 enable-ssl3-method"
+    fi
+
     ./Configure \
         ${OPENSSL_ARCH} \
         -fPIC \
@@ -371,7 +379,7 @@ compile_tls() {
         enable-ktls \
         enable-ec_nistp_64_gcc_128 \
         enable-tls1_3 \
-        enable-ssl3 enable-ssl3-method \
+        ${ssl3} \
         enable-des enable-rc4 \
         enable-weak-ssl-ciphers;
 
@@ -421,9 +429,6 @@ compile_nghttp2() {
 
 compile_ngtcp2() {
     echo "Compiling ngtcp2, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-    if [ "${TLS_LIB}" = "openssl" ]; then
-        return
-    fi
     local url
     change_dir;
 
@@ -437,8 +442,9 @@ compile_ngtcp2() {
 
     make -j "${CPU_CORES}";
     make install;
-    cp -a crypto/includes/ngtcp2/ngtcp2_crypto_quictls.h crypto/includes/ngtcp2/ngtcp2_crypto.h \
-        "${PREFIX}/include/ngtcp2/"
+
+    [[ ! -f "${PREFIX}/include/ngtcp2/ngtcp2_crypto.h" ]] && cp -a crypto/includes/ngtcp2/ngtcp2_crypto.h "${PREFIX}/include/ngtcp2/"
+    [[ ! -f "${PREFIX}/include/ngtcp2/ngtcp2_crypto_openssl.h" ]] && cp -a crypto/includes/ngtcp2/ngtcp2_crypto_quictls.h "${PREFIX}/include/ngtcp2/"
 
     _copy_license COPYING ngtcp2;
 }
@@ -504,19 +510,24 @@ compile_zstd() {
 
 curl_config() {
     echo "Configuring curl, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-    local with_openssl_quic with_ech
-
-    # --with-openssl-quic and --with-ngtcp2 are mutually exclusive
-    if [ "${TLS_LIB}" = "openssl" ]; then
-        with_openssl_quic="--with-openssl-quic"
-    else
-        with_openssl_quic="--with-ngtcp2"
-    fi
+    local with_ech
 
     case "${ENABLE_ECH}" in
         true|yes|y|Y)
             with_ech="--enable-ech" ;;
     esac
+
+    # Resolve OpenSSL 4.x compatibility issues where API returns 'const' pointers.
+    # These flags prevent "discarded-qualifiers" warnings from being treated as errors 
+    # when -Werror is enabled.
+    # - GCC: -Wno-error=discarded-qualifiers
+    # - Clang: -Wno-error=incompatible-pointer-types-discards-qualifiers
+    major_ver="${OPENSSL_VERSION%%.*}"
+    if [ "${OPENSSL_VERSION}" = "dev" ] || { [ "${major_ver}" -ge 4 ] 2>/dev/null; }; then
+        export CFLAGS="${CFLAGS} \
+            -Wno-error=incompatible-pointer-types-discards-qualifiers \
+            -Wno-error=cast-qual"
+    fi
 
     if [ ! -f configure ]; then
         autoreconf -fi;
@@ -526,8 +537,8 @@ curl_config() {
         --host="${ARCH}-apple-darwin" \
         --prefix="${PREFIX}" \
         --disable-shared --enable-static \
-        --with-openssl "${with_openssl_quic}" --with-brotli --with-zstd \
-        --with-nghttp2 --with-nghttp3 \
+        --with-openssl --with-brotli --with-zstd \
+        --with-nghttp2 --with-nghttp3 --with-ngtcp2 \
         --with-libidn2 --with-libssh2 \
         "${with_ech}" \
         --enable-hsts --enable-mime --enable-cookies \
@@ -540,9 +551,9 @@ curl_config() {
         --enable-alt-svc --enable-websockets \
         --enable-ipv6 --enable-unix-sockets --enable-socketpair \
         --enable-headers-api --enable-versioned-symbols \
-        --enable-threaded-resolver --enable-optimize --enable-pthreads \
-        --enable-warnings --enable-werror \
-        --enable-curldebug --enable-dict --enable-netrc \
+        --enable-threaded-resolver --enable-optimize \
+        --enable-warnings \
+        --enable-dict --enable-netrc \
         --enable-bearer-auth --enable-tls-srp --enable-dnsshuffle \
         --enable-get-easy-options --enable-progress-meter \
         --with-ca-bundle=/etc/ssl/cert.pem \
