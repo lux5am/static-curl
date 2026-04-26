@@ -520,7 +520,7 @@ compile_libunistring() {
 
     ./configure --host "${TARGET}" --prefix="${PREFIX}" --disable-rpath --disable-shared \
         --disable-dependency-tracking --enable-year2038;
-    make -C lib -j "$(nproc)";  # # use `-C lib` to skip tests for musl libcAdd commentMore actions
+    make -C lib -j "$(nproc)";  # # use `-C lib` to skip tests for musl libc
     make -C lib install;
 
     _copy_license COPYING libunistring;
