@@ -604,6 +604,10 @@ compile_tls() {
         download_and_extract "${url}"
     fi
 
+    if [ -z "${OPENSSL_VERSION}" ] && [ -n "${SOURCE_DIR}" ]; then
+        OPENSSL_VERSION="${SOURCE_DIR#*-}"
+    fi
+
     # issues/83 VIA padlock
     # ssl3 is deprecated in 4.x
     major_ver="${OPENSSL_VERSION%%.*}"
