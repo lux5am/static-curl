@@ -301,7 +301,7 @@ arch_variants() {
         if [ "${LIBC}" = "musl" ] || [ "${ID}" = "alpine" ]; then
             # Alpine does not have a GCC cross-compile toolchain.
             # Therefore, musl-cross-make is used for compilation.
-            # install_musl_libc;
+            install_musl_libc;
             install_cross_compile;
             libc_flag="-musl";
         else
