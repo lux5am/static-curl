@@ -2,7 +2,7 @@
 
 # To compile locally, install Docker, clone the Git repository, navigate to the repository directory,
 # and then execute the following command:
-# ARCHES="x86_64 aarch64" CURL_VERSION=8.16.0 TLS_LIB=openssl \
+# ARCHES="x86_64 aarch64" CURL_VERSION=8.19.0 TLS_LIB=openssl \
 #     ZLIB_VERSION= CONTAINER_IMAGE=debian:latest \
 #     sh curl-static-cross.sh
 # script will create a container and compile curl.
@@ -13,8 +13,7 @@
 #     -e RELEASE_DIR=/mnt \
 #     -e ARCHES="x86_64 aarch64 armv7 i686 riscv64 s390x" \
 #     -e ENABLE_DEBUG=0 \
-#     -e CURL_VERSION=8.16.0 \
-#     -e ENABLE_ECH="" \
+#     -e CURL_VERSION=8.19.0 \
 #     -e TLS_LIB=openssl \
 #     -e OPENSSL_VERSION="" \
 #     -e OPENSSL_BRANCH="" \
@@ -56,7 +55,6 @@ init_env() {
     echo "Host Architecture: ${ARCH_HOST}"
     echo "Architecture list: ${ARCHES}"
     echo "cURL version: ${CURL_VERSION}"
-    echo "enable ECH: ${ENABLE_ECH}"
     echo "TLS Library: ${TLS_LIB}"
     echo "OpenSSL version: ${OPENSSL_VERSION}"
     echo "OpenSSL branch: ${OPENSSL_BRANCH}"
@@ -132,11 +130,11 @@ install_cross_compile() {
         # if the variable is set, get the specific version
         if [ -n "${QBT_MUSL_CROSS_MAKE_VERSION}" ]; then
             curl --retry 5 --retry-max-time 120 -s \
-                "https://api.github.com/repos/userdocs/qbt-musl-cross-make-test/releases/tags/${QBT_MUSL_CROSS_MAKE_VERSION}" \
+                "https://api.github.com/repos/userdocs/qbt-musl-cross-make/releases/tags/${QBT_MUSL_CROSS_MAKE_VERSION}" \
                 -o "github-qbt-musl-cross-make.json"
         else
             curl --retry 5 --retry-max-time 120 -s \
-                "https://api.github.com/repos/userdocs/qbt-musl-cross-make-test/releases" \
+                "https://api.github.com/repos/userdocs/qbt-musl-cross-make/releases" \
                 -o "github-qbt-musl-cross-make.json"
         fi
     fi
@@ -158,12 +156,6 @@ install_cross_compile() {
     download_and_extract "${url}"
 
     ln -s "${DIR}/${SOURCE_DIR}/${SOURCE_DIR}" "/${SOURCE_DIR}"
-    cd "/${SOURCE_DIR}/lib/"
-    if [ -f "libatomic.so" ]; then
-        mv libatomic.so libatomic.so.bak
-        ln -s libatomic.a libatomic.so
-    fi
-
     export CC="${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-cc" \
            CXX="${DIR}/${SOURCE_DIR}/bin/${SOURCE_DIR}-c++" \
            CFLAGS="-O3 -Wno-error=unknown-pragmas -Wno-error=sign-compare -Wno-error=cast-align -Wno-maybe-uninitialized -Wno-error=null-dereference" \
@@ -325,16 +317,16 @@ _get_github() {
 
     # GitHub API has a limit of 60 requests per hour, cache the results.
     echo "Downloading ${repo} releases from GitHub"
-    echo "URL: https://api.github.com/repos/${repo}/releases"
+    echo "URL: https://api.github.com/repos/${repo}/releases?per_page=100"
 
     # get token from github settings
     auth_header=""
     set +o xtrace
-    if [ -n "${TOKEN_READ}" ]; then
+    if [ -n "${TOKEN_READ:-}" ]; then
         auth_header="token ${TOKEN_READ}"
     fi
 
-    status_code=$(curl --retry 5 --retry-max-time 120 "https://api.github.com/repos/${repo}/releases" \
+    status_code=$(curl --retry 5 --retry-max-time 120 "https://api.github.com/repos/${repo}/releases?per_page=100" \
         -w "%{http_code}" \
         -o "${release_file}" \
         -H "Authorization: ${auth_header}" \
@@ -345,7 +337,7 @@ _get_github() {
     if [ "${size_of}" -lt 200 ] || [ "${status_code}" -ne 200 ]; then
         echo "The release of ${repo} is empty, download tags instead."
         set +o xtrace
-        status_code=$(curl --retry 5 --retry-max-time 120 "https://api.github.com/repos/${repo}/tags" \
+        status_code=$(curl --retry 5 --retry-max-time 120 "https://api.github.com/repos/${repo}/tags?per_page=100" \
             -w "%{http_code}" \
             -o "${release_file}" \
             -H "Authorization: ${auth_header}" \
@@ -361,73 +353,270 @@ _get_github() {
     fi
 }
 
-_get_tag() {
-    # Function to get the latest tag based on given criteria
-    jq -c -r "[.[] | select(${2})][0]" "${1}" > /tmp/tmp_release.json;
+_github_urlencode() {
+    jq -nr --arg value "$1" '$value | @uri'
 }
 
-_get_latest_tag() {
-    local release_file release_json
+_get_github_release_by_tag() {
+    local repo tag release_file auth_header status_code encoded_tag xtrace_enabled
+    repo=$1
+    tag=$2
+    release_file=$3
+    encoded_tag=$(_github_urlencode "${tag}")
+
+    auth_header=""
+    case $- in
+        *x*) xtrace_enabled=1 ;;
+        *) xtrace_enabled=0 ;;
+    esac
+
+    set +o xtrace
+    if [ -n "${TOKEN_READ:-}" ]; then
+        auth_header="token ${TOKEN_READ}"
+    fi
+
+    status_code=$(curl --retry 5 --retry-max-time 120 "https://api.github.com/repos/${repo}/releases/tags/${encoded_tag}" \
+        -w "%{http_code}" \
+        -o "${release_file}" \
+        -H "Authorization: ${auth_header}" \
+        -s -L --compressed)
+
+    auth_header=""
+    [ "${xtrace_enabled}" = "1" ] && set -o xtrace
+
+    if [ "${status_code}" -eq 200 ] 2>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+_github_tag_candidates() {
+    local repo version bare_version project underscored_version
+    repo=$1
+    version=$2
+    project=${repo#*/}
+    bare_version=${version#v}
+    underscored_version=$(printf "%s" "${bare_version}" | tr '.' '_')
+
+    printf "%s\n" "${version}"
+    printf "%s\n" "${bare_version}"
+    printf "v%s\n" "${bare_version}"
+    printf "%s-%s\n" "${project}" "${bare_version}"
+    printf "%s-%s\n" "${project}" "${underscored_version}"
+
+    case "${repo}" in
+        curl/curl)
+            printf "curl-%s\n" "${underscored_version}" ;;
+        c-ares/c-ares)
+            printf "cares-%s\n" "${underscored_version}" ;;
+        openssl/openssl)
+            printf "openssl-%s\n" "${bare_version}"
+            printf "OpenSSL_%s\n" "${underscored_version}" ;;
+    esac
+}
+
+_github_select_release_by_tag() {
+    local release_file tag
+    release_file=$1
+    tag=$2
+
+    jq -c -r --arg tag "${tag}" '
+        if type == "array" then
+            ([.[] | select((.tag_name // .name // "") == $tag) | select((.draft // false) == false)][0] // empty)
+        else
+            empty
+        end
+    ' "${release_file}"
+}
+
+_github_select_latest_release() {
+    local release_file
     release_file=$1
 
-    # Get the latest tag that is not a draft and not a pre-release
-    _get_tag "${release_file}" "(.prerelease != true) and (.draft != true)"
+    jq -c -r '
+        if type == "array" then
+            ([.[] | select(((.draft // false) | not) and ((.prerelease // false) | not))][0])
+            // ([.[] | select((.draft // false) | not)][0])
+            // .[0]
+            // empty
+        else
+            empty
+        end
+    ' "${release_file}"
+}
 
-    release_json=$(cat /tmp/tmp_release.json)
+_github_select_release_by_version() {
+    local release_file version
+    release_file=$1
+    version=$2
 
-    # If no tag found, get the latest tag that is not a draft
-    if [ "${release_json}" = "null" ] || [ -z "${release_json}" ]; then
-        _get_tag "${release_file}" ".draft != true"
-        release_json=$(cat /tmp/tmp_release.json)
-    fi
+    jq -c -r --arg version "${version}" '
+        def version_key:
+            tostring
+            | ascii_downcase
+            | . as $source
+            | (if ($source | test("^v?[0-9]+([._-][0-9]+)+[a-z0-9._-]*$")) then
+                   $source
+               else
+                   (try ($source | capture("^.*?[^0-9a-z]v?(?<v>[0-9]+([._-][0-9]+)+[a-z0-9._-]*)").v) catch "")
+               end)
+            | sub("^v"; "")
+            | gsub("[_-]"; ".")
+            | gsub("[^0-9a-z.]+"; ".")
+            | gsub("\\.+"; ".")
+            | sub("^\\."; "")
+            | sub("\\.$"; "");
 
-    # If still no tag found, get the first tag
-    if [ "${release_json}" = "null" ] || [ -z "${release_json}" ]; then
-        _get_tag "${release_file}" "."
-    fi
+        ($version | version_key) as $wanted
+        | [
+            .[]
+            | select((.draft // false) == false)
+            | {
+                release: .,
+                tag_version: ((.tag_name // .name // "") | version_key),
+                name_version: ((.name // "") | version_key)
+              }
+            | select(.tag_version == $wanted or .name_version == $wanted)
+          ] as $matches
+        | if ($matches | length) == 1 then
+              $matches[0].release
+          elif ($matches | length) > 1 then
+              error("ambiguous GitHub release version: " + $version)
+          else
+              empty
+          end
+    ' "${release_file}"
+}
+
+_github_select_asset_url() {
+    local release_file project version
+    release_file=$1
+    project=$2
+    version=$3
+
+    jq -r --arg project "${project}" --arg version "${version}" '
+        def name_key:
+            tostring
+            | ascii_downcase
+            | gsub("[_-]"; ".")
+            | gsub("[^0-9a-z.]+"; ".")
+            | gsub("\\.+"; ".")
+            | sub("^\\."; "")
+            | sub("\\.$"; "");
+
+        def version_key:
+            tostring
+            | ascii_downcase
+            | . as $source
+            | (if ($source | test("^v?[0-9]+([._-][0-9]+)+[a-z0-9._-]*$")) then
+                   $source
+               else
+                   (try ($source | capture("^.*?[^0-9a-z]v?(?<v>[0-9]+([._-][0-9]+)+[a-z0-9._-]*)").v) catch "")
+               end)
+            | sub("^v"; "")
+            | gsub("[_-]"; ".")
+            | gsub("[^0-9a-z.]+"; ".")
+            | gsub("\\.+"; ".")
+            | sub("^\\."; "")
+            | sub("\\.$"; "");
+
+        def ext_score:
+            if test("\\.tar\\.xz$"; "i") then 0
+            elif test("\\.tar\\.gz$"; "i") then 1
+            elif test("\\.tar\\.bz2$"; "i") then 2
+            elif test("\\.tgz$"; "i") then 3
+            else 99 end;
+
+        ($project | name_key) as $project_key
+        | ($version | if . == "" then "" else version_key end) as $version_key
+        | [
+            .assets[]?
+            | select((.state // "uploaded") == "uploaded")
+            | select(.browser_download_url != null)
+            | select(.name | test("\\.(tar\\.xz|tar\\.gz|tar\\.bz2|tgz)$"; "i"))
+            | {
+                url: .browser_download_url,
+                version_score: (if $version_key == "" or (.name | name_key | contains($version_key)) then 0 else 1 end),
+                project_score: (if (.name | name_key | contains($project_key)) then 0 else 1 end),
+                ext_score: (.name | ext_score)
+              }
+          ]
+        | sort_by(.version_score, .project_score, .ext_score)
+        | .[0].url // empty
+    ' "${release_file}"
 }
 
 url_from_github() {
-    local browser_download_urls browser_download_url url repo version tag_name release_file
+    local url repo version tag_name release_file project tag release_json found
     repo=$1
     version=$2
     release_file="github-${repo#*/}.json"
+    project=${repo#*/}
+    found=0
 
-    if [ ! -f "${release_file}" ]; then
-        _get_github "${repo}"
-    fi
+    rm -f /tmp/tmp_release.json
 
-    if [ -z "${version}" ]; then
-        _get_latest_tag "${release_file}"
+    if [ -n "${version}" ]; then
+        if [ -f "${release_file}" ]; then
+            for tag in $(_github_tag_candidates "${repo}" "${version}"); do
+                _github_select_release_by_tag "${release_file}" "${tag}" > /tmp/tmp_release.json
+                release_json=$(cat /tmp/tmp_release.json)
+                if [ "${release_json}" != "null" ] && [ -n "${release_json}" ]; then
+                    found=1
+                    break
+                fi
+            done
+        fi
+
+        if [ "${found}" = "0" ] && [ -f "${release_file}" ]; then
+            if ! _github_select_release_by_version "${release_file}" "${version}" > /tmp/tmp_release.json; then
+                echo "ERROR. Ambiguous ${version} from ${repo} of GitHub"
+                exit 1
+            fi
+            release_json=$(cat /tmp/tmp_release.json)
+            if [ "${release_json}" != "null" ] && [ -n "${release_json}" ]; then
+                found=1
+            fi
+        fi
+
+        if [ "${found}" = "0" ]; then
+            for tag in $(_github_tag_candidates "${repo}" "${version}"); do
+                if _get_github_release_by_tag "${repo}" "${tag}" /tmp/tmp_release.json; then
+                    found=1
+                    break
+                fi
+            done
+        fi
+
+        if [ "${found}" = "0" ]; then
+            if [ ! -f "${release_file}" ]; then
+                _get_github "${repo}"
+            fi
+            if ! _github_select_release_by_version "${release_file}" "${version}" > /tmp/tmp_release.json; then
+                echo "ERROR. Ambiguous ${version} from ${repo} of GitHub"
+                exit 1
+            fi
+        fi
     else
-        jq -c -r "map(select(.tag_name == \"${version}\")
-                  // select(.tag_name | startswith(\"${version}\"))
-                  // select(.tag_name | endswith(\"${version}\"))
-                  // select(.tag_name | contains(\"${version}\"))
-                  // select(.name == \"${version}\")
-                  // select(.name | startswith(\"${version}\"))
-                  // select(.name | endswith(\"${version}\"))
-                  // select(.name | contains(\"${version}\")))[0]" \
-            "${release_file}" > /tmp/tmp_release.json
+        if [ ! -f "${release_file}" ]; then
+            _get_github "${repo}"
+        fi
+        _github_select_latest_release "${release_file}" > /tmp/tmp_release.json
     fi
 
-    browser_download_urls=$(jq -r '.assets[]' /tmp/tmp_release.json | grep browser_download_url || true)
-
-    if [ -n "${browser_download_urls}" ]; then
-        suffixes="tar.xz tar.gz tar.bz2 tgz"
-        for suffix in ${suffixes}; do
-            browser_download_url=$(printf "%s" "${browser_download_urls}" | grep "${suffix}\"" || true)
-            [ -n "$browser_download_url" ] && break
-        done
-
-        url=$(printf "%s" "${browser_download_url}" | head -1 | awk '{print $2}' | sed 's/"//g' || true)
+    release_json=$(cat /tmp/tmp_release.json)
+    if [ "${release_json}" = "null" ] || [ -z "${release_json}" ]; then
+        echo "ERROR. Failed to get the ${version:-latest} from ${repo} of GitHub"
+        exit 1
     fi
+
+    url=$(_github_select_asset_url /tmp/tmp_release.json "${project}" "${version}")
 
     if [ -z "${url}" ]; then
-        tag_name=$(jq -r '.tag_name // .name' /tmp/tmp_release.json | head -1)
+        tag_name=$(jq -r '.tag_name // .name // empty' /tmp/tmp_release.json | head -1)
         # get from "Source Code" of releases
         if [ "${tag_name}" = "null" ] || [ "${tag_name}" = "" ]; then
-            echo "ERROR. Failed to get the ${version} from ${repo} of GitHub"
+            echo "ERROR. Failed to get the ${version:-latest} from ${repo} of GitHub"
             exit 1
         fi
         url="https://github.com/${repo}/archive/refs/tags/${tag_name}.tar.gz"
@@ -435,6 +624,26 @@ url_from_github() {
 
     rm -f /tmp/tmp_release.json;
     URL="${url}"
+}
+
+_set_openssl_version_from_url() {
+    local url candidate version
+    url=$1
+
+    [ -n "${OPENSSL_VERSION}" ] && return
+
+    candidate=$(printf "%s" "${url%%\?*}" \
+        | sed -E 's#/$##; s#^.*/##; s/\.(tar\.(xz|gz|bz2)|tgz|zip)$//; s/^[Oo]pen[Ss][Ss][Ll][-_]//; s/^[Oo]pen[Ss][Ss][Ll][-_]//; s/^[Vv]//' \
+        | tr '_' '.')
+    version=$(printf "%s" "${candidate}" | sed -n -E 's/^([0-9]+(\.[0-9]+)+[A-Za-z0-9._-]*).*/\1/p')
+
+    if [ -n "${version}" ]; then
+        OPENSSL_VERSION="${version}"
+        export OPENSSL_VERSION
+        echo "Resolved OpenSSL version: ${OPENSSL_VERSION}"
+    else
+        echo "WARNING. Failed to resolve OpenSSL version from URL: ${url}"
+    fi
 }
 
 download_and_extract() {
@@ -602,6 +811,7 @@ compile_tls() {
         url_from_github openssl/openssl "${OPENSSL_VERSION}"
         url="${URL}"
         download_and_extract "${url}"
+        _set_openssl_version_from_url "${url}"
     fi
 
     if [ -z "${OPENSSL_VERSION}" ] && [ -n "${SOURCE_DIR}" ]; then
@@ -812,11 +1022,6 @@ curl_config() {
         ac_cv_header_stdatomic_h="ac_cv_header_stdatomic_h=no"
     fi
 
-    case "${ENABLE_ECH}" in
-        true|yes|y|Y)
-            with_ech="--enable-ech" ;;
-    esac
-
     # Resolve OpenSSL 4.x compatibility issues where API returns 'const' pointers.
     # These flags prevent "discarded-qualifiers" warnings from being treated as errors 
     # when -Werror is enabled.
@@ -824,6 +1029,8 @@ curl_config() {
     # - Clang: -Wno-error=incompatible-pointer-types-discards-qualifiers
     major_ver="${OPENSSL_VERSION%%.*}"
     if [ "${OPENSSL_VERSION}" = "dev" ] || { [ "${major_ver}" -ge 4 ] 2>/dev/null; }; then
+        echo "OpenSSL 4.x detected, enabling ECH support"
+        with_ech="--enable-ech"
         case "${CC}" in
             clang*)
                 export CFLAGS="${CFLAGS} -Wno-error=incompatible-pointer-types-discards-qualifiers -Wno-error=cast-qual"
@@ -997,7 +1204,6 @@ _build_in_docker() {
         -e ARCHES="${ARCHES}" \
         -e ENABLE_DEBUG="${ENABLE_DEBUG}" \
         -e CURL_VERSION="${CURL_VERSION}" \
-        -e ENABLE_ECH="${ENABLE_ECH}" \
         -e TLS_LIB="${TLS_LIB}" \
         -e OPENSSL_VERSION="${OPENSSL_VERSION}" \
         -e OPENSSL_BRANCH="${OPENSSL_BRANCH}" \
