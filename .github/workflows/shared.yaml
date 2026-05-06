@@ -75,7 +75,7 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Upload artifact (version)
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: curl-version
           path: release/version.txt
@@ -83,7 +83,7 @@ jobs:
           overwrite: true
 
       - name: Upload artifact install
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: curl-install-linux-musl-${{ env.VERSION }}
           path: release/curl-install*
@@ -92,7 +92,7 @@ jobs:
           overwrite: true
 
       - name: Upload artifact src
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: curl-src-linux-musl-${{ env.VERSION }}
           path: release/curl-src*
