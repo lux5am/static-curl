@@ -2,7 +2,7 @@
 
 # To compile locally, install Docker, clone the Git repository, navigate to the repository directory,
 # and then execute the following command:
-# ARCHES="x86_64 aarch64" CURL_VERSION=8.19.0 TLS_LIB=openssl \
+# ARCHES="x86_64 aarch64" CURL_VERSION=8.20.0 TLS_LIB=openssl \
 #     ZLIB_VERSION= CONTAINER_IMAGE=debian:latest \
 #     sh curl-static-cross.sh
 # script will create a container and compile curl.
@@ -13,7 +13,7 @@
 #     -e RELEASE_DIR=/mnt \
 #     -e ARCHES="x86_64 aarch64 armv7 i686 riscv64 s390x" \
 #     -e ENABLE_DEBUG=0 \
-#     -e CURL_VERSION=8.19.0 \
+#     -e CURL_VERSION=8.20.0 \
 #     -e TLS_LIB=openssl \
 #     -e OPENSSL_VERSION="" \
 #     -e OPENSSL_BRANCH="" \
@@ -82,7 +82,7 @@ install_packages_alpine() {
     apk upgrade;
     apk add \
         build-base clang automake cmake autoconf libtool binutils linux-headers \
-        tree zip curl wget git jq xz grep sed groff gnupg perl python3 \
+        curl wget git jq xz grep sed groff gnupg perl python3 \
         ca-certificates ca-certificates-bundle \
         cunit-dev \
         zlib-static zlib-dev \
@@ -98,7 +98,7 @@ install_packages_debian() {
     apt-get install -y apt-utils > /dev/null;
     apt-get upgrade -y > /dev/null;
     apt-get install -y automake cmake autoconf libtool binutils pkg-config \
-        tree zip curl wget git jq xz-utils grep sed groff gnupg libcunit1-dev libgpg-error-dev;
+        curl wget git jq xz-utils grep sed groff gnupg libcunit1-dev libgpg-error-dev;
     available_clang=$(apt-cache search clang | grep -E '^clang-[0-9]+ ' | awk '{print $1}' | sort -V | tail -n 1)
     if [ -n "${available_clang}" ]; then
         apt-get install -y "${available_clang}";
@@ -171,7 +171,7 @@ install_cross_compile_debian() {
     arch_name=${ARCH}
 
     case "${ARCH}" in
-	armv5)
+    	armv5)
             arch_compiler=arm
             c_lib=gnueabi
             arch_name=arm
@@ -1046,35 +1046,35 @@ curl_config() {
     fi
 
     PKG_CONFIG="pkg-config --static" \
-        ./configure \
-            --host="${TARGET}" \
-            --prefix="${PREFIX}" \
-            --enable-shared --enable-static \
-            --with-openssl --with-brotli --with-zstd \
-            --with-nghttp2 --with-nghttp3 --with-ngtcp2 \
-            --with-libidn2 --with-libssh2 \
-            "${with_ech}" \
-            "${ac_cv_header_stdatomic_h}" \
-            --enable-hsts --enable-mime --enable-cookies \
-            --enable-http-auth --enable-manual \
-            --enable-proxy --enable-file --enable-http \
-            --enable-ftp --enable-telnet --enable-tftp \
-            --enable-pop3 --enable-imap --enable-smtp \
-            --enable-gopher --enable-mqtt --enable-smb --enable-ntlm \
-            --enable-doh --enable-dateparse --enable-verbose \
-            --enable-alt-svc --enable-websockets \
-            --enable-ipv6 --enable-unix-sockets --enable-socketpair \
-            --enable-headers-api --enable-versioned-symbols \
-            --enable-threaded-resolver --enable-optimize \
-            --enable-warnings --enable-libcurl-option \
-            --enable-dict --enable-netrc \
-            --enable-bearer-auth --enable-tls-srp --enable-dnsshuffle \
-            --enable-get-easy-options --enable-progress-meter \
-            --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt \
-            --with-ca-path=/etc/ssl/certs \
-            --with-ca-fallback --enable-ares --enable-httpsrr --enable-ipfs \
-            --disable-ldap --disable-ldaps --enable-ssls-export \
-            "${ENABLE_DEBUG}";
+    ./configure \
+        --host="${TARGET}" \
+        --prefix="${PREFIX}" \
+        --enable-static --enable-shared \
+        --with-openssl --with-brotli --with-zstd \
+        --with-nghttp2 --with-nghttp3 --with-ngtcp2 \
+        --with-libidn2 --with-libssh2 \
+        "${with_ech}" \
+        "${ac_cv_header_stdatomic_h}" \
+        --enable-hsts --enable-mime --enable-cookies \
+        --enable-http-auth --enable-manual \
+        --enable-proxy --enable-file --enable-http \
+        --enable-ftp --enable-telnet --enable-tftp \
+        --enable-pop3 --enable-imap --enable-smtp \
+        --enable-gopher --enable-mqtt --enable-smb --enable-ntlm \
+        --enable-doh --enable-dateparse --enable-verbose \
+        --enable-alt-svc --enable-websockets \
+        --enable-ipv6 --enable-unix-sockets --enable-socketpair \
+        --enable-headers-api --enable-versioned-symbols \
+        --enable-threaded-resolver --enable-optimize \
+        --enable-warnings --enable-libcurl-option \
+        --enable-dict --enable-netrc \
+        --enable-bearer-auth --enable-tls-srp --enable-dnsshuffle \
+        --enable-get-easy-options --enable-progress-meter \
+        --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt \
+        --with-ca-path=/etc/ssl/certs \
+        --with-ca-fallback --enable-ares --enable-httpsrr --enable-ipfs \
+        --disable-ldap --disable-ldaps --enable-ssls-export \
+        "${ENABLE_DEBUG}";
 }
 
 compile_curl() {
@@ -1105,23 +1105,16 @@ compile_curl() {
         make -j "$(nproc)" LDFLAGS="-Wl,-s ${LDFLAGS}";
     fi
 
-    mkdir -p "${RELEASE_DIR}/curl_install"
-    # make install prefix="/usr" DESTDIR="${RELEASE_DIR}/curl_install";
-    make install
-    # zip -r -9 -q "/data/release/curl_install.zip" "/data/curl_install/"
+    _copy_license COPYING curl;
+    make install;
 
-    # echo "CURRENT_DIR: $PWD"
-    # zip -r -9 -q "/data/release/curl_all.zip" "/data/${SOURCE_DIR}/"
-    # cd /
-    # mv "/data/${SOURCE_DIR}" "${RELEASE_DIR}/curl_src"
+    name_suffix="linux-${ARCH}${libc_flag}-${CURL_VERSION}"
+    echo "${name_suffix}" > "${RELEASE_DIR}/release/version.txt"
 
-    echo "${CURL_VERSION}" > "${RELEASE_DIR}/release/version.txt"
-
-    XZ_OPT=-9 tar -Jcf "${RELEASE_DIR}/release/curl-install-linux-${ARCH}-dev-${CURL_VERSION}.tar.xz" -C "${PREFIX}" .
-    XZ_OPT=-9 tar -Jcf "${RELEASE_DIR}/release/curl-src-linux-${ARCH}-dev-${CURL_VERSION}.tar.xz" -C "/data/${SOURCE_DIR}" .
-
-    # _copy_license COPYING curl;
-    # make install;
+    XZ_OPT=-9 tar -Jcf "${RELEASE_DIR}/release/curl-src-${name_suffix}.tar.xz" -C "/data/${SOURCE_DIR}" .
+    XZ_OPT=-9 tar -Jcf "${RELEASE_DIR}/release/curl-all-${name_suffix}.tar.xz" -C "${PREFIX}" .
+    XZ_OPT=-9 tar -Jcf "${RELEASE_DIR}/release/curl-install-${name_suffix}.tar.xz" -C "${PREFIX}" .
+    find "${PREFIX}/lib" -maxdepth 1 -name "libcurl.so*" -printf "%f\n" | XZ_OPT=-9 tar -Jcf "${RELEASE_DIR}/release/libcurl-${name_suffix}.tar.xz" -C "${PREFIX}/lib" -T -
 }
 
 install_curl() {
@@ -1261,7 +1254,7 @@ main() {
     fi
 
     # If not in docker, run the script in docker and exit
-    if [ ! -f /.dockerenv ]; then
+    if [ ! -f /.dockerenv ] && [ ! -f /run/.containerenv ]; then
         _build_in_docker;
     fi
 

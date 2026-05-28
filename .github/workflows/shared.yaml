@@ -7,6 +7,11 @@ on:
   # run it manually
   workflow_dispatch:
     inputs:
+      ARCHES_LINUX_MUSL:
+        description: 'Architecture list'
+        required: false
+        default: 'aarch64'
+        type: string
       CURL_VERSION:
         description: 'cURL Version'
         required: false
@@ -82,11 +87,29 @@ jobs:
           retention-days: 90
           overwrite: true
 
+      - name: Upload artifact lib
+        uses: actions/upload-artifact@v7
+        with:
+          name: libcurl-${{ env.VERSION }}
+          path: release/libcurl-*
+          retention-days: 90
+          compression-level: 0
+          overwrite: true
+
+      - name: Upload artifact all
+        uses: actions/upload-artifact@v7
+        with:
+          name: curl-all-${{ env.VERSION }}
+          path: release/curl-all-*
+          retention-days: 90
+          compression-level: 0
+          overwrite: true
+
       - name: Upload artifact install
         uses: actions/upload-artifact@v7
         with:
-          name: curl-install-linux-musl-${{ env.VERSION }}
-          path: release/curl-install*
+          name: curl-install-${{ env.VERSION }}
+          path: release/curl-install-*
           retention-days: 90
           compression-level: 0
           overwrite: true
@@ -94,8 +117,8 @@ jobs:
       - name: Upload artifact src
         uses: actions/upload-artifact@v7
         with:
-          name: curl-src-linux-musl-${{ env.VERSION }}
-          path: release/curl-src*
+          name: curl-src-${{ env.VERSION }}
+          path: release/curl-src-*
           retention-days: 90
           compression-level: 0
           overwrite: true
