@@ -689,6 +689,31 @@ _copy_license() {
     cp -p "${1}" "${PREFIX}/licenses/${2}";
 }
 
+prepare_cacert() {
+    echo "Preparing CA certificate bundle" | tee "${RELEASE_DIR}/running"
+    export CACERT_FILE="${DIR}/cacert.pem"
+    export CACERT_LICENSE_FILE="${DIR}/cacert.pem.LICENSE"
+    mkdir -p "${DIR}"
+
+    if [ ! -s "${CACERT_FILE}" ]; then
+        (
+            cd "${DIR}" &&
+            curl --retry 5 --retry-max-time 120 -o cacert.pem https://curl.se/ca/cacert.pem &&
+            curl --retry 5 --retry-max-time 120 -o cacert.pem.sha256 https://curl.se/ca/cacert.pem.sha256 &&
+            sha256sum -c cacert.pem.sha256
+        )
+    fi
+
+    if [ ! -s "${CACERT_LICENSE_FILE}" ]; then
+        curl --retry 5 --retry-max-time 120 -o "${CACERT_LICENSE_FILE}" https://www.mozilla.org/media/MPL/2.0/index.txt
+    fi
+
+    mkdir -p "${RELEASE_DIR}/release"
+    if [ ! -f "${RELEASE_DIR}/release/cacert.pem" ]; then
+        cp -pf "${CACERT_FILE}" "${RELEASE_DIR}/release/cacert.pem"
+    fi
+}
+
 compile_zlib() {
     echo "Compiling zlib, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
     local url
@@ -850,7 +875,7 @@ compile_tls() {
         ${OPENSSL_ARCH} \
         -fPIC \
         --prefix="${PREFIX}" \
-        --openssldir=/etc/ssl \
+        --openssldir=/opt/static-curl/ssl \
         threads no-shared \
         ${no_pie_tests_asm} \
         ${no_hw_padlock} \
@@ -1113,7 +1138,7 @@ compile_curl() {
 
     XZ_OPT=-9 tar -Jcf "${RELEASE_DIR}/release/curl-src-${name_suffix}.tar.xz" -C "/data/${SOURCE_DIR}" .
     XZ_OPT=-9 tar -Jcf "${RELEASE_DIR}/release/curl-all-${name_suffix}.tar.xz" -C "${PREFIX}" .
-    XZ_OPT=-9 tar -Jcf "${RELEASE_DIR}/release/curl-install-${name_suffix}.tar.xz" -C "${PREFIX}" .
+    cd "$PREFIX"; XZ_OPT=-9 tar -Jcf "${RELEASE_DIR}/release/curl-install-${name_suffix}.tar.xz" bin/*curl* lib/libcurl.so*
     find "${PREFIX}/lib" -maxdepth 1 -name "libcurl.so*" -printf "%f\n" | XZ_OPT=-9 tar -Jcf "${RELEASE_DIR}/release/libcurl-${name_suffix}.tar.xz" -C "${PREFIX}/lib" -T -
 }
 
@@ -1135,6 +1160,8 @@ install_curl() {
     fi
 
     if [ -n "${STATIC_LIBRARY}" ]; then
+        cp -pf "${CACERT_FILE}" "${PREFIX}/cacert.pem";
+        _copy_license "${CACERT_LICENSE_FILE}" ca-bundle;
         XZ_OPT=-9 tar -Jcf "${RELEASE_DIR}/release/curl-linux-${ARCH}-dev-${CURL_VERSION}.tar.xz" -C "${DIR}" "curl-${ARCH}"
     fi
 }
@@ -1261,6 +1288,8 @@ main() {
     init_env;                    # Initialize the build env
     install_packages;            # Install dependencies
     set -o errexit -o xtrace;
+
+    prepare_cacert;               # Download & verify curl.se CA bundle once for all arches
 
     echo "Compiling for all ARCHes: ${ARCHES}"
     for arch_temp in ${ARCHES}; do
