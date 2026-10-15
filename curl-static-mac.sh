@@ -26,6 +26,17 @@ init_env() {
             ENABLE_DEBUG="" ;;
     esac
 
+    case "${ZLIB_LIB}" in
+        ""|zlib-ng)
+            ZLIB_LIB="zlib-ng" ;;
+        zlib)
+            ;;
+        *)
+            echo "Unsupported ZLIB_LIB: ${ZLIB_LIB}, must be zlib or zlib-ng";
+            exit 1 ;;
+    esac
+    export ZLIB_LIB
+
     echo "Source directory: ${DIR}"
     echo "Release directory: ${RELEASE_DIR}"
     echo "cURL version: ${CURL_VERSION}"
@@ -35,7 +46,9 @@ init_env() {
     echo "ngtcp2 version: ${NGTCP2_VERSION}"
     echo "nghttp3 version: ${NGHTTP3_VERSION}"
     echo "nghttp2 version: ${NGHTTP2_VERSION}"
+    echo "zlib library: ${ZLIB_LIB}"
     echo "zlib version: ${ZLIB_VERSION}"
+    echo "zlib-ng version: ${ZLIB_NG_VERSION}"
     echo "libunistring version: ${LIBUNISTRING_VERSION}"
     echo "libidn2 version: ${LIBIDN2_VERSION}"
     echo "libpsl version: ${LIBPSL_VERSION}"
@@ -511,6 +524,30 @@ compile_zlib() {
     _copy_license LICENSE zlib;
 }
 
+compile_zlib_ng() {
+    echo "Compiling zlib-ng, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
+    local url
+    change_dir;
+
+    url_from_github zlib-ng/zlib-ng "${ZLIB_NG_VERSION}"
+    url="${URL}"
+    download_and_extract "${url}"
+
+    mkdir -p out
+    cd out/
+
+    # curl only supports the zlib API, so build zlib-ng in zlib compatible mode (ZLIB_COMPAT),
+    # which installs libz.a, zlib.h and zlib.pc as a drop-in replacement for zlib.
+    # SIMD code paths are selected at runtime.
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_OSX_ARCHITECTURES:STRING="${ARCH}" \
+        -DBUILD_SHARED_LIBS=OFF -DZLIB_COMPAT=ON -DBUILD_TESTING=OFF \
+        -DWITH_NATIVE_INSTRUCTIONS=OFF -DWITH_RUNTIME_CPU_DETECTION=ON ..;
+    cmake --build . --config Release --target install;
+
+    _copy_license ../LICENSE.md zlib-ng;
+}
+
 compile_libunistring() {
     echo "Compiling libunistring, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
     local url
@@ -752,7 +789,7 @@ compile_zstd() {
 
 curl_config() {
     echo "Configuring curl, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-    local with_ech
+    local with_ech enable_gssapi_apple enable_smb
 
     # Resolve OpenSSL 4.x compatibility issues where API returns 'const' pointers.
     # These flags prevent "discarded-qualifiers" warnings from being treated as errors 
@@ -768,6 +805,20 @@ curl_config() {
             -Wno-error=cast-qual"
     fi
 
+    # if curl version >= 8.22.0, enable GSSAPI on Apple platforms
+    if [ "${CURL_VERSION}" = "dev" ] || { [ "$(printf '%s\n' "8.22.0" "${CURL_VERSION}" | sort -V | head -n1)" = "8.22.0" ]; }; then
+        echo "cURL version ${CURL_VERSION} supports GSSAPI on Apple platforms, enabling it"
+        enable_gssapi_apple="--enable-gssapi-apple"
+    fi
+
+    # SMB support was removed in cURL 8.23.0, only enable it for older versions
+    # https://github.com/curl/curl/pull/22652
+    if [ "${CURL_VERSION}" = "dev" ] || { [ "$(printf '%s\n' "8.23.0" "${CURL_VERSION}" | sort -V | head -n1)" = "8.23.0" ]; }; then
+        echo "cURL version ${CURL_VERSION} has removed SMB support, disabling it"
+    else
+        enable_smb="--enable-smb"
+    fi
+
     if [ ! -f configure ]; then
         autoreconf -fi;
     fi
@@ -780,12 +831,13 @@ curl_config() {
         --with-nghttp2 --with-nghttp3 --with-ngtcp2 \
         --with-libidn2 --with-libssh2 \
         "${with_ech}" \
+        "${enable_gssapi_apple}" \
         --enable-hsts --enable-mime --enable-cookies \
         --enable-http-auth --enable-manual \
         --enable-proxy --enable-file --enable-http \
         --enable-ftp --enable-telnet --enable-tftp \
         --enable-pop3 --enable-imap --enable-smtp \
-        --enable-gopher --enable-mqtt --enable-smb --enable-ntlm \
+        --enable-gopher --enable-mqtt "${enable_smb}" --enable-ntlm \
         --enable-doh --enable-dateparse --enable-verbose \
         --enable-alt-svc --enable-websockets \
         --enable-ipv6 --enable-unix-sockets --enable-socketpair \
@@ -877,7 +929,11 @@ compile() {
     arch_variants;
 
     compile_tls;
-    compile_zlib;
+    if [ "${ZLIB_LIB}" = "zlib-ng" ]; then
+        compile_zlib_ng;
+    else
+        compile_zlib;
+    fi
     compile_zstd;
     compile_libunistring;
     compile_libidn2;

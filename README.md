@@ -14,14 +14,14 @@ Simply execute it to compile the most recent version.
 - [nghttp2](https://github.com/nghttp2/nghttp2)
 - [brotli](https://github.com/google/brotli)
 - [zstd](https://github.com/facebook/zstd)
-- [zlib](https://zlib.net)
+- [zlib-ng](https://github.com/zlib-ng/zlib-ng) (default) or [zlib](https://zlib.net)
 - [libidn2](https://github.com/libidn/libidn2)
 - [c-ares](https://c-ares.haxx.se)
 - [libpsl](https://rockdaboot.github.io/libpsl/)
 - [trurl](https://curl.se/trurl/)
 
 `curl -V`
-- Protocols: dict file ftp ftps gopher gophers http https imap imaps ipfs ipns mqtt mqtts pop3 pop3s rtsp scp sftp smb smbs smtp smtps telnet tftp ws wss
+- Protocols: dict file ftp ftps gopher gophers http https imap imaps ipfs ipns mqtt mqtts pop3 pop3s rtsp scp sftp smtp smtps telnet tftp ws wss
 - Features: alt-svc asyn-rr AsynchDNS brotli ECH HSTS HTTP2 HTTP3 HTTPS-proxy HTTPSRR IDN IPv6 Largefile libz NTLM PSL SSL SSLS-EXPORT threadsafe TLS-SRP UnixSockets zstd
 
 ## Usage
@@ -100,7 +100,9 @@ supported architectures
       -e NGTCP2_VERSION="" \
       -e NGHTTP3_VERSION="" \
       -e NGHTTP2_VERSION="" \
+      -e ZLIB_LIB="zlib-ng" \
       -e ZLIB_VERSION="" \
+      -e ZLIB_NG_VERSION="" \
       -e LIBUNISTRING_VERSION="" \
       -e LIBIDN2_VERSION="" \
       -e LIBPSL_VERSION="" \
@@ -124,7 +126,9 @@ ARCHES="x86_64 arm64" \
     NGHTTP2_VERSION="" \
     LIBIDN2_VERSION="" \
     LIBUNISTRING_VERSION="" \
+    ZLIB_LIB="zlib-ng" \
     ZLIB_VERSION="" \
+    ZLIB_NG_VERSION="" \
     BROTLI_VERSION="" \
     ZSTD_VERSION="" \
     LIBSSH2_VERSION="" \
@@ -150,7 +154,9 @@ ARCHES="x86_64 arm64" \
       -e NGTCP2_VERSION="" \
       -e NGHTTP3_VERSION="" \
       -e NGHTTP2_VERSION="" \
+      -e ZLIB_LIB="zlib-ng" \
       -e ZLIB_VERSION="" \
+      -e ZLIB_NG_VERSION="" \
       -e LIBUNISTRING_VERSION="" \
       -e LIBIDN2_VERSION="" \
       -e LIBPSL_VERSION="" \
@@ -178,7 +184,9 @@ For all `VERSION` variables, leaving them blank will automatically fetch the lat
 - `LIBUNISTRING_VERSION`: The version of libunistring.
 - `LIBIDN2_VERSION`: The version of libidn2.
 - `LIBSSH2_VERSION`: The version of libssh2.
-- `ZLIB_VERSION`: The version of zlib.
+- `ZLIB_LIB`: The zlib library. `zlib-ng`(default) or `zlib`. `zlib-ng` is built in zlib compatible mode (`ZLIB_COMPAT=ON`) as a drop-in replacement for zlib, with runtime CPU detection for SIMD optimizations.
+- `ZLIB_VERSION`: The version of zlib, only affects `ZLIB_LIB=zlib`.
+- `ZLIB_NG_VERSION`: The version of zlib-ng, only affects `ZLIB_LIB=zlib-ng`.
 - `BROTLI_VERSION`: The version of brotli.
 - `ZSTD_VERSION`: The version of zstd.
 - `LIBPSL_VERSION`: The version of libpsl.
@@ -189,9 +197,38 @@ For all `VERSION` variables, leaving them blank will automatically fetch the lat
 
 The compiled files will be saved in the current `release` directory.
 
-### ECH Support
+## Important Changes
 
-Starting from cURL 8.20.0, ECH (Encrypted Client Hello) support is enabled by default using OpenSSL 4.x.
+### zlib-ng by default (cURL release > 8.22.0)
 
-- **cURL >= 8.20.0**: Built with OpenSSL 4.x, ECH enabled by default.
-- **cURL < 8.20.0**: Two build variants were provided (with and without ECH support). OpenSSL 3.x is still supported for compatibility.
+- [zlib-ng](https://github.com/zlib-ng/zlib-ng) replaces zlib by default, providing faster gzip/deflate compression and decompression with SIMD optimizations (SSE/AVX, NEON, etc.) selected at runtime based on the CPU.
+- It is built in zlib compatible mode (`ZLIB_COMPAT=ON`), so `curl -V` reports it as `zlib/x.y.z.zlib-ng`, and the `dev` package still provides `libz.a` and `zlib.h`.
+- Set `ZLIB_LIB=zlib` to build with the original zlib instead.
+
+Pull Request and performance test result: https://github.com/stunnel/static-curl/pull/180
+
+### Embedded CA certificates (cURL release >= 8.22.0)
+
+- The [curl.se CA bundle](https://curl.se/docs/caextract.html) (`cacert.pem`, checksum-verified at build time) is embedded into every binary via `--with-ca-embed`.
+- The binaries no longer depend on a CA file path from the build machine (e.g. Debian's `/etc/ssl/certs/ca-certificates.crt`), so HTTPS works out of the box on any distro, even without a system CA bundle.
+- Windows builds no longer ship a separate `curl-ca-bundle.crt` file; they use the same embedded bundle.
+- `cacert.pem` is included in each `dev` package, and its SHA256 is recorded in the release notes.
+- You can still override the trust store at runtime with `--cacert` / `--capath` or the `CURL_CA_BUNDLE` / `SSL_CERT_FILE` environment variables.
+
+### ECH enabled by default (cURL release >= 8.20.0)
+
+- All builds now use OpenSSL 4.x with ECH (Encrypted Client Hello) enabled by default, so there is only one build variant per platform.
+- The `ENABLE_ECH` variable has been removed.
+- For older releases (cURL < 8.20.0), two variants were provided (with and without ECH). OpenSSL 3.x can still be selected via `OPENSSL_VERSION` for compatibility.
+
+### Platform-specific features
+
+- **Windows**: built with `--enable-sspi` and `--enable-windows-unicode` (SSPI authentication and Unicode file names/arguments).
+- **macOS**: built with `--with-apple-sectrust` and `--enable-ca-native`, so certificates can also be verified via the Apple Security framework / system keychain. (cURL release > 8.22.0)
+
+### Other changes
+
+- **No more `Insufficient randomness` errors**: OpenSSL is now built with a private `openssldir` (`/opt/static-curl/ssl`) instead of `/etc/ssl`, so it no longer loads the host's `/etc/ssl/openssl.cnf`, which could break random seeding on some distros.
+- **SMB and NTLM** are explicitly enabled again, as they are disabled by default since cURL 8.20.0. SMB support was [removed](https://github.com/curl/curl/pull/22652) in cURL 8.23.0, so `smb`/`smbs` are only available for cURL < 8.23.0.
+- **`--libcurl` option** is enabled (`--enable-libcurl-option`), so `curl --libcurl file.c` can generate libcurl source code.
+- **Podman** can be used as a drop-in replacement for Docker when building for Linux and Windows.
