@@ -7,11 +7,6 @@ on:
   # run it manually
   workflow_dispatch:
     inputs:
-      ARCHES_LINUX_MUSL:
-        description: 'Architecture list'
-        required: false
-        default: 'aarch64'
-        type: string
       CURL_VERSION:
         description: 'cURL Version'
         required: false
@@ -31,6 +26,16 @@ on:
         description: 'OpenSSL Branch'
         required: false
         default: ''
+        type: string
+      ZLIB_LIB:
+        description: 'zlib Library (zlib-ng or zlib, default zlib-ng)'
+        required: false
+        default: ''
+        type: string
+      ARCHES_LINUX_MUSL:
+        description: "Linux musl Architecture List (set 'none' to skip)"
+        required: false
+        default: 'aarch64'
         type: string
 
 jobs:
@@ -57,7 +62,9 @@ jobs:
           echo "NGHTTP2_VERSION=${{ vars.NGHTTP2_VERSION }}" >> $GITHUB_ENV
           echo "LIBIDN2_VERSION=${{ vars.LIBIDN2_VERSION }}" >> $GITHUB_ENV
           echo "LIBUNISTRING_VERSION=${{ vars.LIBUNISTRING_VERSION }}" >> $GITHUB_ENV
+          echo "ZLIB_LIB=${{ inputs.ZLIB_LIB != '' && inputs.ZLIB_LIB || vars.ZLIB_LIB }}" >> $GITHUB_ENV
           echo "ZLIB_VERSION=${{ vars.ZLIB_VERSION }}" >> $GITHUB_ENV
+          echo "ZLIB_NG_VERSION=${{ vars.ZLIB_NG_VERSION }}" >> $GITHUB_ENV
           echo "BROTLI_VERSION=${{ vars.BROTLI_VERSION }}" >> $GITHUB_ENV
           echo "ZSTD_VERSION=${{ vars.ZSTD_VERSION }}" >> $GITHUB_ENV
           echo "LIBSSH2_VERSION=${{ vars.LIBSSH2_VERSION }}" >> $GITHUB_ENV
