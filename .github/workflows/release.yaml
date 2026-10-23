@@ -49,6 +49,25 @@ on:
         required: false
         default: 'x86_64 arm64'
         type: string
+      RELEASE_REVISION:
+        description: "Release revision for rebuilding an already released cURL version (e.g. '1' releases as 8.23.0-1); leave empty for a normal release"
+        required: false
+        default: ''
+        type: string
+
+  # called by pr-test.yaml to test PRs after manual approval
+  workflow_call:
+    inputs:
+      PR_ARCHES:
+        description: 'Architecture list for PR builds, parsed from the approval comment'
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  # hardcoded prefix: when called, github.workflow is the caller's name and would collide with its group
+  group: build-and-release-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   build-Linux:
@@ -65,7 +84,7 @@ jobs:
       - name: Set build variables
         run: |
           # Set all build variables with fallback logic
-          echo "ARCHES=${{ inputs.ARCHES_LINUX_GLIBC != '' && inputs.ARCHES_LINUX_GLIBC || vars.ARCHES_LINUX_GLIBC }}" >> $GITHUB_ENV
+          echo "ARCHES=${{ github.event_name == 'pull_request' && (inputs.PR_ARCHES || vars.PR_ARCHES || 'x86_64 aarch64') || (inputs.ARCHES_LINUX_GLIBC != '' && inputs.ARCHES_LINUX_GLIBC || vars.ARCHES_LINUX_GLIBC) }}" >> $GITHUB_ENV
           echo "CURL_VERSION=${{ inputs.CURL_VERSION != '' && inputs.CURL_VERSION || vars.CURL_VERSION }}" >> $GITHUB_ENV
           echo "TLS_LIB=${{ inputs.TLS_LIB != '' && inputs.TLS_LIB || vars.TLS_LIB }}" >> $GITHUB_ENV
           echo "OPENSSL_VERSION=${{ inputs.OPENSSL_VERSION != '' && inputs.OPENSSL_VERSION || vars.OPENSSL_VERSION }}" >> $GITHUB_ENV
@@ -129,7 +148,7 @@ jobs:
       - name: Set build variables
         run: |
           # Set all build variables with fallback logic
-          echo "ARCHES=${{ inputs.ARCHES_LINUX_MUSL != '' && inputs.ARCHES_LINUX_MUSL || vars.ARCHES_LINUX_MUSL }}" >> $GITHUB_ENV
+          echo "ARCHES=${{ github.event_name == 'pull_request' && (inputs.PR_ARCHES || vars.PR_ARCHES || 'x86_64 aarch64') || (inputs.ARCHES_LINUX_MUSL != '' && inputs.ARCHES_LINUX_MUSL || vars.ARCHES_LINUX_MUSL) }}" >> $GITHUB_ENV
           echo "CURL_VERSION=${{ inputs.CURL_VERSION != '' && inputs.CURL_VERSION || vars.CURL_VERSION }}" >> $GITHUB_ENV
           echo "TLS_LIB=${{ inputs.TLS_LIB != '' && inputs.TLS_LIB || vars.TLS_LIB }}" >> $GITHUB_ENV
           echo "OPENSSL_VERSION=${{ inputs.OPENSSL_VERSION != '' && inputs.OPENSSL_VERSION || vars.OPENSSL_VERSION }}" >> $GITHUB_ENV
@@ -194,7 +213,18 @@ jobs:
       - name: Set build variables
         run: |
           # Set all build variables with fallback logic
-          echo "ARCHES=${{ inputs.ARCHES_WINDOWS != '' && inputs.ARCHES_WINDOWS || vars.ARCHES_WINDOWS }}" >> $GITHUB_ENV
+          arches="${{ github.event_name == 'pull_request' && (inputs.PR_ARCHES || vars.PR_ARCHES || 'x86_64 aarch64') || (inputs.ARCHES_WINDOWS != '' && inputs.ARCHES_WINDOWS || vars.ARCHES_WINDOWS) }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # PR arches are shared with Linux, keep only the ones Windows supports
+            win_arches=""
+            for arch in ${arches}; do
+              case "${arch}" in
+                x86_64|aarch64|armv7|i686) win_arches="${win_arches:+${win_arches} }${arch}" ;;
+              esac
+            done
+            arches="${win_arches:-x86_64}"
+          fi
+          echo "ARCHES=${arches}" >> $GITHUB_ENV
           echo "CURL_VERSION=${{ inputs.CURL_VERSION != '' && inputs.CURL_VERSION || vars.CURL_VERSION }}" >> $GITHUB_ENV
           echo "TLS_LIB=${{ inputs.TLS_LIB != '' && inputs.TLS_LIB || vars.TLS_LIB }}" >> $GITHUB_ENV
           echo "OPENSSL_VERSION=${{ inputs.OPENSSL_VERSION != '' && inputs.OPENSSL_VERSION || vars.OPENSSL_VERSION }}" >> $GITHUB_ENV
@@ -336,8 +366,16 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Set RELEASE_TAG
+        env:
+          RELEASE_REVISION: ${{ inputs.RELEASE_REVISION }}
         run: |
           RELEASE_TAG="${{ env.VERSION }}"
+          if [ -n "$RELEASE_REVISION" ]; then
+            case "$RELEASE_REVISION" in
+              *[!0-9]*) echo "::error::RELEASE_REVISION must be a number, got: $RELEASE_REVISION"; exit 1 ;;
+            esac
+            RELEASE_TAG="${RELEASE_TAG}-${RELEASE_REVISION}"
+          fi
           echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
           echo "Will release as: $RELEASE_TAG"
 
@@ -401,7 +439,7 @@ jobs:
           body_path: release/release.md
           tag_name: ${{ env.RELEASE_TAG }}
           name: Release ${{ env.RELEASE_TAG }}
-          make_latest: ${{ env.RELEASE_TAG == env.VERSION }}
+          make_latest: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifact

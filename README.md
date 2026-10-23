@@ -22,7 +22,9 @@ Simply execute it to compile the most recent version.
 
 `curl -V`
 - Protocols: dict file ftp ftps gopher gophers http https imap imaps ipfs ipns mqtt mqtts pop3 pop3s rtsp scp sftp smtp smtps telnet tftp ws wss
-- Features: alt-svc asyn-rr AsynchDNS brotli ECH HSTS HTTP2 HTTP3 HTTPS-proxy HTTPSRR IDN IPv6 Largefile libz NTLM PSL SSL SSLS-EXPORT threadsafe TLS-SRP UnixSockets zstd
+- Features: alt-svc asyn-rr AsynchDNS brotli CAcert ECH HSTS HTTP2 HTTP3 HTTPS-proxy HTTPSIG HTTPSRR IDN IPv6 Largefile libz NTLM proxy-HTTP3 PSL SSL SSLS-EXPORT threadsafe UnixSockets zstd
+  - macOS additionally: AppleSecTrust GSS-API Kerberos SPNEGO
+  - Windows additionally: Kerberos SPNEGO SSPI Unicode
 
 ## Usage
 
@@ -42,6 +44,8 @@ For older releases (before 8.20.0), two versions were provided: one with ECH sup
 - `curl-macOS-ARCH-dev-VERSION`: binaries, headers and static library archives for macOS
 - `curl-windows-ARCH-VERSION`: binaries for Windows
 - `curl-windows-ARCH-dev-VERSION`: binaries, headers and library archives for Windows
+
+A release tagged `VERSION-N` (e.g. `8.23.0-1`) is a rebuild of the same cURL version, e.g. to pick up an updated CA bundle or a security fix in a dependency. It supersedes `VERSION` and any earlier revisions.
 
 ## Known issue
 For Linux glibc versions, if your system’s `/etc/nsswitch.conf` file is configured with `passwd: compat`, `glibc` will attempt to load `libnss_compat.so`, `libnss_nis.so`, `libpthread.so`, etc. These libraries may not be compatible with the statically linked `glibc`, and the program might crash.  
@@ -230,5 +234,7 @@ Pull Request and performance test result: https://github.com/stunnel/static-curl
 
 - **No more `Insufficient randomness` errors**: OpenSSL is now built with a private `openssldir` (`/opt/static-curl/ssl`) instead of `/etc/ssl`, so it no longer loads the host's `/etc/ssl/openssl.cnf`, which could break random seeding on some distros.
 - **SMB and NTLM** are explicitly enabled again, as they are disabled by default since cURL 8.20.0. SMB support was [removed](https://github.com/curl/curl/pull/22652) in cURL 8.23.0, so `smb`/`smbs` are only available for cURL < 8.23.0.
+- **TLS-SRP** was [removed](https://github.com/curl/curl/blob/master/docs/DEPRECATE.md) in cURL 8.22.0, so it is only enabled for cURL < 8.22.0.
+- **HTTP Message Signatures** ([RFC 9421](https://www.rfc-editor.org/rfc/rfc9421)) are enabled (`--enable-httpsig`, experimental) for cURL >= 8.22.0, requests can be signed with `--httpsig-key`, `--httpsig-keyid`, `--httpsig-algo` (`ed25519` or `hmac-sha256`) and `--httpsig-headers`.
 - **`--libcurl` option** is enabled (`--enable-libcurl-option`), so `curl --libcurl file.c` can generate libcurl source code.
 - **Podman** can be used as a drop-in replacement for Docker when building for Linux and Windows.

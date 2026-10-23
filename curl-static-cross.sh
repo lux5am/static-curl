@@ -315,13 +315,13 @@ arch_variants() {
 }
 
 _get_github() {
-    local repo release_file auth_header status_code size_of
+    local repo release_file auth_header status_code per_page found
     repo=$1
     release_file="github-${repo#*/}.json"
+    found=0
 
     # GitHub API has a limit of 60 requests per hour, cache the results.
     echo "Downloading ${repo} releases from GitHub"
-    echo "URL: https://api.github.com/repos/${repo}/releases?per_page=100"
 
     # get token from github settings
     auth_header=""
@@ -330,15 +330,38 @@ _get_github() {
         auth_header="token ${TOKEN_READ}"
     fi
 
-    status_code=$(curl --retry 5 --retry-max-time 120 "https://api.github.com/repos/${repo}/releases?per_page=100" \
-        -w "%{http_code}" \
-        -o "${release_file}" \
-        -H "Authorization: ${auth_header}" \
-        -s -L --compressed)
+    # GitHub randomly returns an empty array with status 200 for repos that do have releases,
+    # retry a few times with different page sizes.
+    for per_page in 100 50 30 100 50 30; do
+        echo "URL: https://api.github.com/repos/${repo}/releases?per_page=${per_page}"
+        status_code=$(curl --retry 5 --retry-max-time 120 "https://api.github.com/repos/${repo}/releases?per_page=${per_page}" \
+            -w "%{http_code}" \
+            -o "${release_file}" \
+            -H "Authorization: ${auth_header}" \
+            -s -L --compressed)
+        if [ "${status_code}" -eq 200 ] && jq -e 'type == "array" and length > 0' "${release_file}" > /dev/null 2>&1; then
+            found=1
+            break
+        fi
+        sleep 2
+    done
+
+    if [ "${found}" = "0" ]; then
+        # the latest release endpoint is not affected, use it as a single-element release list
+        echo "URL: https://api.github.com/repos/${repo}/releases/latest"
+        status_code=$(curl --retry 5 --retry-max-time 120 "https://api.github.com/repos/${repo}/releases/latest" \
+            -w "%{http_code}" \
+            -o "${release_file}" \
+            -H "Authorization: ${auth_header}" \
+            -s -L --compressed)
+        if [ "${status_code}" -eq 200 ] && jq -e '.tag_name' "${release_file}" > /dev/null 2>&1; then
+            jq '[.]' "${release_file}" > "${release_file}.tmp" && mv -f "${release_file}.tmp" "${release_file}"
+            found=1
+        fi
+    fi
 
     set -o xtrace
-    size_of=$(stat -c "%s" "${release_file}")
-    if [ "${size_of}" -lt 200 ] || [ "${status_code}" -ne 200 ]; then
+    if [ "${found}" = "0" ]; then
         echo "The release of ${repo} is empty, download tags instead."
         set +o xtrace
         status_code=$(curl --retry 5 --retry-max-time 120 "https://api.github.com/repos/${repo}/tags?per_page=100" \
@@ -998,12 +1021,13 @@ compile_brotli() {
 
     url_from_github google/brotli "${BROTLI_VERSION}"
     url="${URL}"
-    # for loongarch64, if version is 1.2.0, replace it with 1.1.0
-    # there is a bug in 1.2.0 for loongarch64, see https://github.com/google/brotli/commit/e230f474b87134e8c6c85b630084c612057f253e
-    if [ "${ARCH}" = "loongarch64" ]; then
-        url=$(echo "${url}" | sed 's/v1.2.0/v1.1.0/g');
-    fi
     download_and_extract "${url}"
+
+    # brotli 1.2.x uses __attribute__((model("small"))), which is not supported on loongarch64,
+    # see https://github.com/google/brotli/commit/e230f474b87134e8c6c85b630084c612057f253e
+    if [ "${ARCH}" = "loongarch64" ]; then
+        sed -i 's/^#if BROTLI_GNUC_HAS_ATTRIBUTE(model, 3, 0, 3)$/#if 0/' c/common/platform.h;
+    fi
 
     mkdir -p out
     cd out/
@@ -1063,9 +1087,15 @@ compile_trurl() {
     fi
 }
 
+_curl_version_ge() {
+    # Return 0 if CURL_VERSION >= $1, "dev" is treated as the newest version
+    [ "${CURL_VERSION}" = "dev" ] && return 0
+    [ "$(printf '%s\n' "$1" "${CURL_VERSION}" | sort -V | head -n1)" = "$1" ]
+}
+
 curl_config() {
     echo "Configuring curl, Arch: ${ARCH}" | tee "${RELEASE_DIR}/running"
-    local with_ech ac_cv_header_stdatomic_h enable_smb
+    local with_ech ac_cv_header_stdatomic_h enable_smb enable_proxy_http3 enable_tls_srp enable_httpsig
 
     if [ "${ARCH}" = "mips" ] && [ "${LIBC}" != "musl" ]; then
         ac_cv_header_stdatomic_h="ac_cv_header_stdatomic_h=no"
@@ -1092,10 +1122,25 @@ curl_config() {
 
     # SMB support was removed in cURL 8.23.0, only enable it for older versions
     # https://github.com/curl/curl/pull/22652
-    if [ "${CURL_VERSION}" = "dev" ] || { [ "$(printf '%s\n' "8.23.0" "${CURL_VERSION}" | sort -V | head -n1)" = "8.23.0" ]; }; then
+    if _curl_version_ge 8.23.0; then
         echo "cURL version ${CURL_VERSION} has removed SMB support, disabling it"
     else
         enable_smb="--enable-smb"
+    fi
+
+    # HTTP/3 proxy support was added in cURL 8.21.0, only enable it for newer versions
+    if _curl_version_ge 8.21.0; then
+        enable_proxy_http3="--enable-proxy-http3"
+    fi
+
+    # TLS-SRP support was removed in cURL 8.22.0, only enable it for older versions
+    if ! _curl_version_ge 8.22.0; then
+        enable_tls_srp="--enable-tls-srp"
+    fi
+
+    # HTTP Message Signatures (RFC 9421) support was added in cURL 8.22.0, only enable it for newer versions
+    if _curl_version_ge 8.22.0; then
+        enable_httpsig="--enable-httpsig"
     fi
 
     if [ ! -f configure ]; then
@@ -1113,7 +1158,8 @@ curl_config() {
         "${ac_cv_header_stdatomic_h}" \
         --enable-hsts --enable-mime --enable-cookies \
         --enable-http-auth --enable-manual \
-        --enable-proxy --enable-file --enable-http \
+        --enable-proxy "${enable_proxy_http3}" \
+        --enable-file --enable-http \
         --enable-ftp --enable-telnet --enable-tftp \
         --enable-pop3 --enable-imap --enable-smtp \
         --enable-gopher --enable-mqtt "${enable_smb}" --enable-ntlm \
@@ -1124,10 +1170,10 @@ curl_config() {
         --enable-threaded-resolver --enable-optimize \
         --enable-warnings --enable-libcurl-option \
         --enable-dict --enable-netrc \
-        --enable-bearer-auth --enable-tls-srp --enable-dnsshuffle \
+        --enable-bearer-auth "${enable_tls_srp}" --enable-dnsshuffle \
         --enable-get-easy-options --enable-progress-meter \
         --with-ca-embed="${CACERT_FILE}" \
-        --enable-ares --enable-httpsrr --enable-ipfs \
+        --enable-ares --enable-httpsrr --enable-ipfs "${enable_httpsig}" \
         --disable-ldap --disable-ldaps --enable-ssls-export \
         "${ENABLE_DEBUG}";
 }
